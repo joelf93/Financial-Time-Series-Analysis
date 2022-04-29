@@ -1,0 +1,355 @@
+---
+title: "Financial Time-Series Analysis"
+author: "Group 38"
+date: "5 6 2020"
+output: html_document
+---
+
+## To include your own code after the simulation.
+
+```{r}
+myMatrikel = 6822651 # put in your matriculation number here.
+
+# 1-1) Start search for errors here
+{
+  n = 500
+  
+  set.seed(6822651)
+  
+  p = sample(1:6, size= 1)
+  q = sample(1:6, size= 1)
+  
+  alpha = round(runif(q, min = 0, max = 1/q), digits = 3)
+  beta  = round(runif(p, min = 0, max = 1/p), digits = 3)
+  
+  
+  initY = rnorm(max(p, q))
+  initErr = rnorm(max(p, q))
+  
+  y = err = 1:(2*n)*0
+  y[1:max(p, q)] = initY
+  err[1:max(p, q)] = initErr
+  
+  for (t in (max(p, q) + 1):length(y))
+  {
+    err[t] = rnorm(1)
+    y[t] = beta %*% y[(t - 1):(t - p)] + alpha %*% err[(t - 1):(t - q)] + err[t]
+  }
+  
+  Y = y[(n + 1)*(2*n)]
+}  
+# end search for errors here
+
+# delete unneccessary variables 
+rm(list = c("err", "initErr", "initY", "y", "t", "myMatrikel"))
+```
+
+## 1-3)
+```{r}
+
+#Simulation ARMA
+
+ARMA=arima.sim(n=n, list(ar=beta, ma=alpha))
+
+# Plot autocorrelation
+
+
+acf(ARMA, lag.max = 10)
+acf(ARMA, lag.max = 50)
+```
+
+## 1-4)
+
+```{r}
+AR=arima.sim(n=n, list(ar= beta))
+AR.BIC = AR.AIC =  rep(0,15)
+for (p in 0:15)
+{
+  model = arima(AR, order = c(p, 0, 0))
+  AR.AIC[p + 1] = model$aic
+  AR.BIC[p + 1] = -2*model$loglik + log(n)*(p + 0)
+}
+
+AR.AIC
+AR.BIC
+```
+
+## find the best Models
+
+```{r}
+min(AR.AIC)
+which(AR.AIC==min(AR.AIC))
+best_model.AR.AIC=arima(AR, order = c(2,0,0))
+best_model.AR.AIC
+
+min(AR.BIC)
+which(AR.BIC==min(AR.BIC))
+best_model.AR.BIC=arima(AR, order = c(2,0,0))
+best_model.AR.BIC
+```
+
+## 1-5)
+
+```{r}
+BIC = AIC = matrix(0, nrow = 6, ncol = 6)
+for (p in 0:5)
+{
+  for (q in 0:5)
+  {
+    model = arima(ARMA, order = c(p, 0, q))
+    AIC[p + 1, q + 1] = model$aic
+    BIC[p + 1, q + 1] = -2*model$loglik + log(n)*(p + q)
+  }
+}
+AIC
+BIC
+
+# Find the best model
+
+min(AIC)
+best_model.AIC=arima(ARMA, order = c(2, 0, 5))
+best_model.AIC
+
+min(BIC)
+best_model.BIC=arima(ARMA, order = c(2, 0, 0))
+best_model.BIC
+```
+
+## Problem 2
+
+## 2.1
+
+```{r}
+APPL<-read.csv("AAPL.csv")
+
+PBCT<-read.csv("PBCT.csv")
+
+# 2.2
+
+#  the returns for both time-series
+
+Close.Apple<-APPL$Close
+Close.PBCT<-PBCT$Close
+
+
+Return.APPLE<- diff(log(Close.Apple))
+Return.PBCT<- diff(log(Close.PBCT))
+
+
+#Plot of time series
+
+n<-dim(APPL)[1]
+time = seq(2005 + 4/12, 2018 + 4/12, length.out = n)
+
+plot(time,Close.Apple,type="l",xlab="Year",ylab="Price",main="The APPLE and PBCT Index from 2005 to 2018")
+lines(time,Close.PBCT,col="red")
+legend(x =2006, y = 220, legend = c( "Apple","PBCT"), col = c("black", "red"), lty = 1)
+```
+
+## plot of Return
+
+```{r}
+time2<-time[2:n]
+
+plot(time2,Return.APPLE,type="l",xlab="Year",ylab = "Return")
+title("The Return Series of Apple")
+
+plot(time2,Return.PBCT,type="l",xlab="Year",ylab = "Return")
+title("The Return Series of the PBCT")
+```
+
+## 2.3
+
+```{r}
+# fit the garch(1,1)
+
+library(fGarch)
+
+APPL.GARCH11<-garchFit(~garch(1,1),Return.APPLE,trace = FALSE)
+summary(APPL.GARCH11)
+PBCT.GARCH11<-garchFit(~garch(1,1),Return.PBCT,trace=FALSE)
+summary(PBCT.GARCH11)
+```
+
+## plot the conditional volatility
+
+```{r}
+sigma.t<-APPL.GARCH11@sigma.t
+sigma.t1<-PBCT.GARCH11@sigma.t
+
+plot(time2,Return.APPLE,type="l",xlab="Year",ylab="Returns",main= "Volatility and Returns of Apple")
+lines(time2,sigma.t,col="red")
+legend(x=2010,y=-0.05,legend = c("Returns of Apple","Volatility of Apple"),col = c("black","red"),lty=1)
+
+plot(time2,Return.PBCT,type="l",xlab="Year",ylab="Returns",main= "Volatility and Returns of PBCT")
+lines(time2,sigma.t1,col="red")
+legend(x=2013,y=-0.02,legend = c("Returns of PBCT","Volatility of PBCT"),col = c("black","red"),lty=1)
+```
+
+## 2.4)
+
+```{r}
+# Divide the Return-Series
+
+b<-c(2008, 2009.5)
+
+plot(time2,Return.APPLE,type="l",xlab="Year",ylab="Returns",main= " Returns of Apple")
+abline(v=b,col="red", lty=2,lwd=3)
+text(x=2006.5,y=-0.15,cex=0.8,labels = "before the financial crisis")
+text(x=2009,y=0.10,cex=0.8,labels = "during the financial crisis")
+text(x=2015,y=-0.15,cex=0.8,labels = "after the financial crisis")
+
+plot(time2,Return.PBCT,type="l",xlab="Year",ylab="Returns",main= "Returns of PBCT")
+abline(v=b,col="red", lty=2,lwd=3)
+text(x=2006.5,y=-0.10,cex=0.8,labels = "before the financial crisis")
+text(x=2009,y=0.10,cex=0.8,labels = "during the financial crisis")
+text(x=2015,y=-0.10,cex=0.8,labels = "after the financial crisis")
+
+```
+
+## Plot For the Volatility of the both time-series
+
+```{r}
+plot(time2,sigma.t,type="l",xlab="Year",main="Volatility of the Apple")
+abline(v=b,col="red", lty=2,lwd=3)
+text(x=2006.5,y=0.05,cex=0.8,labels = "before the financial crisis")
+text(x=2009.5,y=0.06,cex=0.8,labels = "during the financial crisis")
+text(x=2015,y=0.05,cex=0.8,labels = "after the financial crisis")
+
+plot(time2,sigma.t1,type="l",xlab="Year",main="Volatility of the PBCT")
+abline(v=b,col="red", lty=2,lwd=3)
+text(x=2006.5,y=0.06,cex=0.8,labels = "before the financial crisis")
+text(x=2009.5,y=0.07,cex=0.8,labels = "during the financial crisis")
+text(x=2015,y=0.06,cex=0.8,labels = "after the financial crisis")
+```
+
+## 2.5)
+
+```{r}
+#calculation of the correlation between Return-Service
+
+# Separate Data
+
+a<- which(APPL$Date=="2007-12-31")
+b<-which(APPL$Date=="2009-06-30")
+c<-dim(APPL)[1]
+
+
+# the correlations between the return-series of the two firms
+
+# the correlation before the crisis
+cor1<-cor(Return.APPLE[1:a],Return.PBCT[1:a])
+cor1
+
+# the correlation during the crisis
+cor2<-cor(Return.APPLE[(a+1):b],Return.PBCT[(a+1):b])
+cor2
+
+# the correlation after the crisis
+cor3<-cor(Return.APPLE[(b+1):c],Return.PBCT[(b+1):c])
+cor3
+
+# the correlations between the estimated volatility of the two firms
+
+# the correlations before the crisis  
+cor11<-cor(sigma.t[1:a],sigma.t1[1:a])
+cor11
+
+# the correlations during the crisis
+cor22<-cor(sigma.t[(a+1):b],sigma.t1[(a+1):b])
+cor22
+
+# the correlations after the crisis
+cor33<-cor(sigma.t[(b+1):c],sigma.t1[(b+1):c])
+cor33
+```
+
+## Problem 3
+
+## 3.1
+
+```{r}
+
+AMZN<- read.csv("AMZ.DE.csv")
+
+AMZN$Return=c(NA,diff(log(AMZN$Close)))
+
+#plot
+
+plot.ts(AMZN[,c(5,8)],plot.type="multiple",type="l",main="The Amazon Index and log-Return,from 12.jun.2017  to 12 jun 2020")
+```
+
+## 3.2
+
+```{r}
+#Datentrennung
+
+n<-dim(AMZN)[1]
+AMZN_1<-AMZN[1:which(AMZN$Date=="2019-06-12"),]
+AMZN_2<-AMZN[(which(AMZN$Date=="2019-06-12")+1):n,]
+
+# Fit 4 GARCH(p,q) models for p, q = 1, 2
+library(fGarch)
+
+AMZN_1.GARCH11<-garchFit(~garch(1,1),AMZN_1$Return[-1],trace=FALSE)
+AMZN_1.GARCH11
+AMZN_1.GARCH12=garchFit(~garch(1,2), AMZN_1$Return[-1], trace=FALSE)
+AMZN_1.GARCH12
+AMZN_1.GARCH21=garchFit(~garch(2,1), AMZN_1$Return[-1], trace=FALSE)
+AMZN_1.GARCH21
+AMZN_1.GARCH22=garchFit(~garch(2,2), AMZN_1$Return[-1], trace=FALSE)
+AMZN_1.GARCH22
+
+# BIC
+
+BIC11<-AMZN_1.GARCH11@fit$ics[2]
+BIC12<-AMZN_1.GARCH12@fit$ics[2]
+BIC21<-AMZN_1.GARCH21@fit$ics[2]
+BIC22<-AMZN_1.GARCH22@fit$ics[2]
+
+#show in the table
+
+BIC<-matrix(data=c(BIC11,BIC21,BIC12,BIC22),nrow = 2,ncol=2)
+BIC
+min(BIC)
+
+# the best Model
+
+AMZN_1.GARCH11
+```
+
+## 3.3
+
+```{r}
+#Predict the conditional volatility of year 3 of the time series by using your model from
+
+prediction=predict(AMZN_1.GARCH11,n.ahead=dim(AMZN_2)[1],plot=FALSE)
+Date<-AMZN_2$Date
+prediction=cbind(Date,prediction)
+
+#head the 6 first Data and 6 last Data
+
+head(prediction)
+tail(prediction)
+```
+
+## 3.4- Estimating a new Garch Model
+
+```{r}
+AMZN.GARCH11<-garchFit(~garch(1,1),AMZN$Return[-1],trace=FALSE)
+summary(AMZN.GARCH11)
+
+#volatilität
+
+sigma<-AMZN.GARCH11@sigma.t
+
+#Plot(sigma)
+
+time= seq(2017 + 1/3 , 2020 + 1/3 , length.out= n)
+time2= time[2:n]
+time3= time[which(AMZN$Date=="2019-06-13"):n]
+
+plot(time2,sigma,type="l",xlab="Year",ylab="volatility",main="Estimated conditional standard deviation and predicted Values by GARCH11")
+lines(time3,prediction$standardDeviation,col="red",type="l")
+legend(x=2018.5,y=0.055,legend = c(" the volatility","the predicted Volatility"),col = c("black","red"),lty=1)
+```
